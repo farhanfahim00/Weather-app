@@ -3,41 +3,39 @@ import pandas as pd
 import requests_cache
 from retry_requests import retry
 import json
-from datetime import datetime, timedelta
 
-# Setup Open-Meteo API client
-cache_session = requests_cache.CachedSession('.cache', expire_after=3600)  # Cache for 1 hour
+# Setup Open-Meteo API client with cache and retry
+cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
 
+# Define API endpoint and parameters
 url = "https://archive-api.open-meteo.com/v1/archive"
 
+# Define locations
 locations = [
-    {"name": "Islamabad", "latitude": 33.738045, "longitude": 73.084488},
-    {"name": "Karachi", "latitude": 24.860966, "longitude": 66.990501}
+    {"name": "Karachi", "latitude": 24.8608, "longitude": 67.0104},
+    {"name": "Islamabad", "latitude": 33.7215, "longitude": 73.0433}
 ]
 
-all_data = {}
+# API request parameters common to all locations
+base_params = {
+    "start_date": "2024-05-18",
+    "end_date": "2025-05-16",
+    "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"]
+}
 
-# Dynamic date range (1 year of data, ending yesterday)
-end_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+all_weather_data = {}
 
-print(f"Fetching data from {start_date} to {end_date}")
-
-for location in locations:
-    print(f"\nProcessing data for {location['name']}")
+# Fetch data for each location
+for loc in locations:
+    print(f"\nProcessing data for {loc['name']}")
 
     params = {
-        "latitude": location["latitude"],
-        "longitude": location["longitude"],
-        "start_date": start_date,
-        "end_date": end_date,
-        "daily": ["temperature_2m_max", "temperature_2m_min", "temperature_2m_mean"],
-        "timezone": "Asia/Karachi"  # Force timezone to avoid issues
+        "latitude": loc["latitude"],
+        "longitude": loc["longitude"],
+        **base_params
     }
-
-    print(params)
 
     try:
         responses = openmeteo.weather_api(url, params=params)
@@ -46,43 +44,44 @@ for location in locations:
         print(f"Coordinates: {response.Latitude()}°N {response.Longitude()}°E")
         print(f"Elevation: {response.Elevation()} m asl")
         print(f"Timezone: {response.Timezone()} {response.TimezoneAbbreviation()}")
+        print(f"Timezone difference to GMT+0: {response.UtcOffsetSeconds()} s")
 
+        # Extract daily data
         daily = response.Daily()
-        time_array = daily.Time()  # Should be an array of timestamps
-        temp_max = daily.Variables(0).ValuesAsNumpy()
-        temp_min = daily.Variables(1).ValuesAsNumpy()
-        temp_mean = daily.Variables(2).ValuesAsNumpy()
 
-        # Check if data exists
-        if len(time_array) == 0:
-            print(f"No data available for {location['name']}!")
-            continue
+        # Generate date range based on metadata
+        date_range = pd.date_range(
+            start=pd.to_datetime(daily.Time(), unit="s", utc=True),
+            end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=daily.Interval()),
+            inclusive="left"
+        )
+        formatted_dates = [dt.strftime('%Y-%m-%d') for dt in date_range]
 
-        # Convert timestamps to dates
-        dates = pd.to_datetime(time_array, unit='s', utc=True).strftime('%Y-%m-%d')
+        # Read temperature values
+        temp_mean = daily.Variables(0).ValuesAsNumpy()
+        temp_max = daily.Variables(1).ValuesAsNumpy()
+        temp_min = daily.Variables(2).ValuesAsNumpy()
 
         # Create DataFrame
-        df = pd.DataFrame({
-            "date": dates,
-            "temperature_max": temp_max,
-            "temperature_min": temp_min,
-            "temperature_mean": temp_mean
-        })
+        daily_data = {
+            "date": formatted_dates,
+            "temperature_2m_mean": temp_mean,
+            "temperature_2m_max": temp_max,
+            "temperature_2m_min": temp_min
+        }
 
-        all_data[location["name"]] = df
-
-        print(f"\nFirst 5 rows for {location['name']}:")
-        print(df.head())
+        df = pd.DataFrame(daily_data)
+        all_weather_data[loc["name"]] = df.to_dict(orient="records")
 
     except Exception as e:
-        print(f"🚨 Error for {location['name']}: {str(e)}")
-        # Generate empty DataFrame if API fails
-        all_data[location["name"]] = pd.DataFrame(
-            columns=["date", "temperature_max", "temperature_min", "temperature_mean"])
+        print(f"Error fetching data for {loc['name']}: {e}")
 
-# Save data to JSON
-output_filename = "all_weather_data.json"
-with open(output_filename, "w") as outfile:
-    json.dump({city: df.to_dict("records") for city, df in all_data.items()}, outfile, indent=4)
-
-print(f"\n✅ Weather data saved to {output_filename}")
+# Save all data to JSON file
+output_file = "all_weather_data.json"
+try:
+    with open(output_file, "w") as f:
+        json.dump(all_weather_data, f, indent=4)
+    print(f"Data successfully saved to '{output_file}'")
+except Exception as e:
+    print(f"Failed to save data: {e}")

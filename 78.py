@@ -42,14 +42,28 @@ for location in locations:
         print(f"Timezone: {response.Timezone()}{response.TimezoneAbbreviation()}")
         print(f"Timezone difference to GMT+0: {response.UtcOffsetSeconds()} s")
 
-        # Process daily data
+        # Get daily data
         daily = response.Daily()
-        daily_time = daily.Time()
+        daily_time = daily.Time()  # should be a list of timestamps (in seconds)
+
+        # Debug: check type and values
+        print(f"Raw daily_time: {daily_time[:5]}")
+
+        # Ensure it's converted to a datetime Series
+        dates = pd.to_datetime(daily_time, unit="s", utc=True)
+        formatted_dates = dates.strftime('%Y-%m-%d').tolist()
+
+        # Get temperature values
         daily_temperature_2m = daily.Variables(0).ValuesAsNumpy()
 
-        daily_data = {"date": pd.to_datetime(daily_time, unit="s", utc=True).strftime('%Y-%m-%d'), #converted to string and take first 10 characters since we dont need time
-                      "temperature_2m": daily_temperature_2m}
+        # Final check
+        print(f"Number of dates: {len(formatted_dates)}, Number of temperatures: {len(daily_temperature_2m)}")
 
+        # Create DataFrame
+        daily_data = {
+            "date": formatted_dates,
+            "temperature_2m": daily_temperature_2m
+        }
         daily_dataframe = pd.DataFrame(data=daily_data)
         all_data[location["name"]] = daily_dataframe
 
