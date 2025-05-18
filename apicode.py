@@ -1,3 +1,7 @@
+#weather-app By Sami Ul Haq & Farhan Fahim
+#sami.haq@stud.th-deg.de
+#farhan.taimoor@stud.th-deg.de
+
 import openmeteo_requests
 import pandas as pd
 import requests_cache
@@ -12,13 +16,13 @@ openmeteo = openmeteo_requests.Client(session=retry_session)
 # Define API endpoint and parameters
 url = "https://archive-api.open-meteo.com/v1/archive"
 
-# Define locations
+#locations (karachi=Farhan Fahim, islamabad=Sami-ul-haq)
 locations = [
     {"name": "Karachi", "latitude": 24.8608, "longitude": 67.0104},
     {"name": "Islamabad", "latitude": 33.7215, "longitude": 73.0433}
 ]
 
-# API request parameters common to all locations
+#API request parameters common to all locations (start and end date)
 base_params = {
     "start_date": "2024-05-18",
     "end_date": "2025-05-16",
@@ -27,7 +31,7 @@ base_params = {
 
 all_weather_data = {}
 
-# Fetch data for each location
+#Fetching data for each location
 for loc in locations:
     print(f"\nProcessing data for {loc['name']}")
 
@@ -77,7 +81,7 @@ for loc in locations:
     except Exception as e:
         print(f"Error fetching data for {loc['name']}: {e}")
 
-# Save all data to JSON file
+#Save all data to JSON file
 output_file = "all_weather_data.json"
 try:
     with open(output_file, "w") as f:

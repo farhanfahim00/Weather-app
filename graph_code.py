@@ -1,3 +1,7 @@
+#Web-Scrapper Graph By Sami Ul Haq & Farhan Fahim
+#sami.haq@stud.th-deg.de
+#farhan.taimoor@stud.th-deg.de
+
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
